@@ -37,6 +37,11 @@ private:
 	void createTaskSqf(QString missionDirName, QString fileName, QString taskLine);
 	QString extractOverview(QString line);
 	void createDescriptionExt(QString missionDirName);
+	bool taskTypeShuko = false;
+	bool taskTypeOFP = false;
+	bool taskTypeArmA2 = false;
+	void scanBriefing(QString missionDirName);
+	QString parseTaskCreate(QString line);
 };
 
 #endif // MAINWINDOW_H

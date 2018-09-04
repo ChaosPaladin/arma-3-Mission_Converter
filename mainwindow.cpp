@@ -38,13 +38,14 @@ void MainWindow::on_pushButton_ScanOnly_clicked()
 		if (it.fileName().contains("mission.sqm"))
 		{
 			missionDirName = it.fileInfo().path();
-			//ui->textEdit->append();
+			ui->textEdit->append(missionDirName);
 			checkPMCDir(missionDirName);
-			pmcSqmFound = true;
+			pmcSqmFound = true; taskTypeArmA2 = false; taskTypeOFP = false; taskTypeShuko = false;
 			scanSqm(it.filePath(), missionDirName);
 			scanOverviewHtml(it.fileInfo().absolutePath());
 			scanDescriptionExt(it.fileInfo().absolutePath());
-			//scanInitsqf(it.fileInfo().absolutePath());
+			scanInitsqf(it.fileInfo().absolutePath());
+			scanBriefing(missionDirName);
 		}
 
 		it.next();
@@ -77,6 +78,7 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 
 		if (checkMeline.contains("shk_taskmaster_upd"))
 		{
+			taskTypeShuko = true;
 			//ui->textEdit->append("call SHK_Taskmaster_Upd detected " + line);
 			//ui->textEdit->append(convertSqmLine(line));
 			// we received new SQM onActivation / expActiv line which we can now save
@@ -86,6 +88,7 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 
 		if (checkMeline.contains("objstatus"))
 		{
+			taskTypeOFP = true;
 			//ui->textEdit->append("objStatus detected " + line);
 			//ui->textEdit->append(convertSqmLine(line));
 			// we received new SQM onActivation / expActiv line which we can now save
@@ -95,6 +98,7 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 
 		if (checkMeline.contains("settaskstate"))
 		{
+			taskTypeArmA2 = true;
 			//ui->textEdit->append("setTaskState detected " + line);
 			//ui->textEdit->append(convertSqmLine(line));
 			// we received new SQM onActivation / expActiv line which we can now save
@@ -172,6 +176,60 @@ void MainWindow::scanInitsqf(QString initsqf)
 }
 
 
+void MainWindow::scanBriefing(QString missionDirName)
+{
+	QString myBriefing = missionDirName;
+	myBriefing.append("/briefing.sqf");
+	QFile File(myBriefing);
+
+	if (!File.open(QIODevice::ReadOnly))
+	{
+		ui->textEdit->append("No " + myBriefing + " file found.");
+		return;
+	}
+	else
+	{
+		// source briefing.sqf
+		QTextStream in(&File);
+
+		// PMC/PMC_Briefing.sqf
+		QFile BriefingNew(missionDirName + "/PMC/PMC_Briefing.sqf");
+		if (!BriefingNew.open(QIODevice::WriteOnly))
+		{
+			ui->textEdit->append("Cannot open " + missionDirName + "/PMC/PMC_Briefing.sqf");
+			return;
+		}
+		QTextStream outBriefing(&BriefingNew);
+
+		// PMC/PMC_Tasks.sqf
+		QFile TasksSqf(missionDirName + "/PMC/PMC_Tasks.sqf");
+		if (!TasksSqf.open(QIODevice::WriteOnly))
+		{
+			ui->textEdit->append("Cannot open " + missionDirName + "/PMC/PMC_Tasks.sqf");
+			return;
+		}
+		QTextStream outTasks(&TasksSqf);
+
+		while (!in.atEnd())
+		{
+			QString line = in.readLine();
+			//ui->textEdit->append(line);
+			// waitUntil {!(isNull player)};
+			//if (line.contains("createDiaryRecord")) outBriefing << line << "\n";
+			if (line.contains("createSimpleTask"))
+			{
+				line = parseTaskCreate(line);
+				outTasks << line << "\n";
+			}
+		}
+
+		File.close();
+		BriefingNew.close();
+		TasksSqf.close();
+	}
+}
+
+
 void MainWindow::checkDescriptionExtLine(QString line)
 {
 	line = line.toLower();
@@ -187,9 +245,8 @@ void MainWindow::checkDescriptionExtLine(QString line)
 void MainWindow::checkInitSqf(QString line)
 {
 	line = line.toLower();
-
-	if (line.contains("shk_taskmaster.sqf")) ui->textEdit->append("SHK_Taskmaster.sqf detected.");
-	if (line.contains("briefing.sqf")) ui->textEdit->append("briefing.sqf detected.");
+	if (line.contains("shk_taskmaster.sqf")) ui->textEdit->append("init.sqf -> SHK_Taskmaster.sqf detected.");
+	if (line.contains("briefing.sqf")) ui->textEdit->append("init.sqf -> briefing.sqf detected.");
 }
 
 
@@ -293,4 +350,27 @@ void MainWindow::createDescriptionExt(QString dext)
 		out << overviewBlob << "\n";
 		File.close();
 	}
+}
+
+
+QString MainWindow::parseTaskCreate(QString line)
+{
+	QStringList list;
+	list = line.split(" ");
+	// 0 - objective variable name
+	// 1 - =
+	// 2 - player
+	// 3 - createSimpleTask
+	// 4 - beginning of the array
+	QString temps = "[player,[\"" + list[0] + "\"],[\"";
+	list = line.split("\"");
+	//ui->textEdit->append("list[]: " + list[1]);
+	temps.append(list[1] + "\",\"" + list[1] + "\",\"" + list[1] + "\"],objNull,1,2,true] call BIS_fnc_taskCreate;");
+	// doesnt work here, you have to detect somehow the LAST task, not after every task hehe
+	//temps.append("\n\n[\"t1\", \"ASSIGNED\"] call BIS_fnc_taskSetState;");
+	ui->textEdit->append(temps);
+	//ui->textEdit->append(line);
+	// tasks need to be in reversed order
+	//objective4 = player createSimpleTask ["Target 4"];
+	return temps;
 }
