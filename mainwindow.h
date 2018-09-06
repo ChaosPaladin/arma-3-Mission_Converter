@@ -22,17 +22,17 @@ private slots:
 
 private:
 	Ui::MainWindow *ui;
+	QString pmcVersion = "v0.0.1";
 	QString sqmDir;
 	void scanSqm(QString sqm, QString missionDirName);
 	void scanDescriptionExt(QString dext);
 	void checkDescriptionExtLine(QString line);
-	QString pmcVersion = "v0.0.1";
 	void scanOverviewHtml(QString dext);
 	void scanInitsqf(QString initsqf);
 	void checkInitSqf(QString line);
 	QString convertSqmLine(QString line);
 	int taskID = 0;
-	QString outputSqf, taskFilename, missionDirName, overviewBlob;
+	QString outputSqf, taskFilename, missionDirName, overviewBlob, overviewAddition;
 	void checkPMCDir(QString pmcPath);
 	void createTaskSqf(QString missionDirName, QString fileName, QString taskLine);
 	QString extractOverview(QString line);
@@ -42,6 +42,7 @@ private:
 	bool taskTypeArmA2 = false;
 	void scanBriefing(QString missionDirName);
 	QString parseTaskCreate(QString line);
+	QString sqfHeader();
 };
 
 #endif // MAINWINDOW_H

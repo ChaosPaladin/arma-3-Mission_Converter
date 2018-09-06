@@ -8,9 +8,6 @@ MainWindow::MainWindow(QWidget *parent) :
 {
 	ui->setupUi(this);
 	setWindowTitle("Mission Converter " + pmcVersion + "by PMC.");
-	// debug hardcoded for my pleasure
-	sqmDir = "D:/coding/Test_files/Arma3_Missions";
-	on_pushButton_ScanOnly_clicked();
 }
 
 MainWindow::~MainWindow()
@@ -79,9 +76,6 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 		if (checkMeline.contains("shk_taskmaster_upd"))
 		{
 			taskTypeShuko = true;
-			//ui->textEdit->append("call SHK_Taskmaster_Upd detected " + line);
-			//ui->textEdit->append(convertSqmLine(line));
-			// we received new SQM onActivation / expActiv line which we can now save
 			line = convertSqmLine(line);
 			createTaskSqf(missionDirName, taskFilename, outputSqf);
 		}
@@ -89,9 +83,6 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 		if (checkMeline.contains("objstatus"))
 		{
 			taskTypeOFP = true;
-			//ui->textEdit->append("objStatus detected " + line);
-			//ui->textEdit->append(convertSqmLine(line));
-			// we received new SQM onActivation / expActiv line which we can now save
 			line = convertSqmLine(line);
 			createTaskSqf(missionDirName, taskFilename, outputSqf);
 		}
@@ -99,13 +90,9 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 		if (checkMeline.contains("settaskstate"))
 		{
 			taskTypeArmA2 = true;
-			//ui->textEdit->append("setTaskState detected " + line);
-			//ui->textEdit->append(convertSqmLine(line));
-			// we received new SQM onActivation / expActiv line which we can now save
 			line = convertSqmLine(line);
 			createTaskSqf(missionDirName, taskFilename, outputSqf);
 		}
-		// write new sqm file line
 		out << line << "\n";
 	}
 
@@ -117,20 +104,29 @@ void MainWindow::scanSqm(QString sqm, QString missionDirName)
 void MainWindow::scanDescriptionExt(QString dext)
 {
 	dext.append("/description.ext");
-	QFile File(dext);
 
-	if (!File.open(QIODevice::ReadWrite | QIODevice::Append))
+	bool fileExists = QFileInfo::exists(dext) && QFileInfo(dext).isFile();
+	if (fileExists)
 	{
-		ui->textEdit->append("No description.ext file found, creating new...");
-		createDescriptionExt(dext);
+		QFile File(dext);
+		if (!File.open(QIODevice::ReadWrite))
+		ui->textEdit->append("Opened description.ext successfully: " + File.fileName());
+		QTextStream in(&File);
+		QString line = in.readAll();
+		overviewAddition.clear();
+		checkDescriptionExtLine(line);
+		if (overviewAddition.length() > 0)
+		{
+			in.seek(line.size());
+			in << overviewAddition;
+		}
+
+		File.close();
 	}
 	else
 	{
-		QTextStream in(&File);
-		QString line = in.readAll();
-		checkDescriptionExtLine(line);
-
-		File.close();
+		ui->textEdit->append("No description.ext file found, creating new...");
+		createDescriptionExt(dext);
 	}
 }
 
@@ -150,6 +146,8 @@ void MainWindow::scanOverviewHtml(QString overviewh)
 		QTextStream in(&File);
 		QString line = in.readAll();
 		File.close();
+		// delete overview.html, YIKES !
+		File.remove();
 		overviewBlob = extractOverview(line);
 	}
 }
@@ -178,54 +176,78 @@ void MainWindow::scanInitsqf(QString initsqf)
 
 void MainWindow::scanBriefing(QString missionDirName)
 {
-	QString myBriefing = missionDirName;
-	myBriefing.append("/briefing.sqf");
-	QFile File(myBriefing);
-
-	if (!File.open(QIODevice::ReadOnly))
+	if (taskTypeShuko)
 	{
-		ui->textEdit->append("No " + myBriefing + " file found.");
-		return;
+		QString myBriefing = missionDirName;
+		myBriefing.append("/init.sqf");
+		QFile File(myBriefing);
+
+		if (!File.open(QIODevice::ReadOnly))
+		{
+			ui->textEdit->append("No " + myBriefing + " file found while searching for Shuko.");
+			return;
+		}
+		else
+		{
+			File.close();
+		}
 	}
-	else
+
+	if (taskTypeArmA2)
 	{
-		// source briefing.sqf
-		QTextStream in(&File);
+		QString myBriefing = missionDirName;
+		myBriefing.append("/briefing.sqf");
+		QFile File(myBriefing);
 
-		// PMC/PMC_Briefing.sqf
-		QFile BriefingNew(missionDirName + "/PMC/PMC_Briefing.sqf");
-		if (!BriefingNew.open(QIODevice::WriteOnly))
+		if (!File.open(QIODevice::ReadOnly))
 		{
-			ui->textEdit->append("Cannot open " + missionDirName + "/PMC/PMC_Briefing.sqf");
+			ui->textEdit->append("No " + myBriefing + " file found while searching for ArmA 2.");
 			return;
 		}
-		QTextStream outBriefing(&BriefingNew);
-
-		// PMC/PMC_Tasks.sqf
-		QFile TasksSqf(missionDirName + "/PMC/PMC_Tasks.sqf");
-		if (!TasksSqf.open(QIODevice::WriteOnly))
+		else
 		{
-			ui->textEdit->append("Cannot open " + missionDirName + "/PMC/PMC_Tasks.sqf");
-			return;
-		}
-		QTextStream outTasks(&TasksSqf);
+			// source briefing.sqf
+			QTextStream in(&File);
 
-		while (!in.atEnd())
-		{
-			QString line = in.readLine();
-			//ui->textEdit->append(line);
-			// waitUntil {!(isNull player)};
-			//if (line.contains("createDiaryRecord")) outBriefing << line << "\n";
-			if (line.contains("createSimpleTask"))
+			QFile BriefingNew(missionDirName + "/PMC/PMC_Briefing.sqf");
+			if (!BriefingNew.open(QIODevice::WriteOnly))
 			{
-				line = parseTaskCreate(line);
-				outTasks << line << "\n";
+				ui->textEdit->append("Cannot open " + missionDirName + "/PMC/PMC_Briefing.sqf");
+				return;
 			}
-		}
+			QTextStream outBriefing(&BriefingNew);
 
-		File.close();
-		BriefingNew.close();
-		TasksSqf.close();
+			QFile TasksSqf(missionDirName + "/PMC/PMC_Tasks.sqf");
+			if (!TasksSqf.open(QIODevice::WriteOnly))
+			{
+				ui->textEdit->append("Cannot open " + missionDirName + "/PMC/PMC_Tasks.sqf");
+				return;
+			}
+			QTextStream outTasks(&TasksSqf);
+
+			while (!in.atEnd())
+			{
+				QString line = in.readLine();
+
+				// briefing stuff
+				// waitUntil {!(isNull player)};
+				if (!line.contains("createSimpleTask") && !line.contains("ArmaBriefingConversion") && !line.contains("setSimpleTaskDescription") && !line.contains("// tasks need to be in reversed order") && line.length() > 0)
+				{
+					line.replace(";", ";\n");
+					outBriefing << line;
+				}
+
+				// task stuff
+				if (line.contains("createSimpleTask"))
+				{
+					line = parseTaskCreate(line);
+					outTasks << line << "\n";
+				}
+			}
+			File.close();
+			BriefingNew.close();
+			TasksSqf.close();
+		}
 	}
 }
 
@@ -233,20 +255,33 @@ void MainWindow::scanBriefing(QString missionDirName)
 void MainWindow::checkDescriptionExtLine(QString line)
 {
 	line = line.toLower();
-	if (!line.contains("overviewtext")) ui->textEdit->append("Missing description.ext/overviewText");
-	if (!line.contains("overviewpicture")) ui->textEdit->append("Missing description.ext/overviewPicture");
-	if (!line.contains("onloadname")) ui->textEdit->append("Missing description.ext/onLoadName");
-	if (!line.contains("onloadmission")) ui->textEdit->append("Missing description.ext/onLoadMission");
-	if (!line.contains("onloadintro")) ui->textEdit->append("Missing description.ext/onLoadIntro");
-	if (!line.contains("author")) ui->textEdit->append("Missing description.ext/author");
+	if (!line.contains("overviewtext")) overviewAddition.append(overviewBlob);
+	if (!line.contains("overviewpicture")) overviewAddition.append("\noverviewPicture = \"\";");
+	if (!line.contains("onloadname")) overviewAddition.append("\nonloadname = \"\";");
+	if (!line.contains("onloadmission")) overviewAddition.append("\nonloadmission = \"\";");
+	if (!line.contains("onloadintro")) overviewAddition.append("\nonloadintro = \"\";");
+	if (!line.contains("author")) overviewAddition.append("\nauthor = \"\";");
+	if (!line.contains("cfgdebriefing"))
+	{
+		overviewAddition.append("\n\nclass CfgDebriefing\n{\n\tclass pmc_end1\n\t{\n\t\ttitle = \"Mission Accomplished!\";\n\t\tdescription = \"Congratulations\";\n\t};\n\n");
+		overviewAddition.append("\tclass pmc_end2\n\t{\n\t\ttitle = \"Mission Lost!\";\n\t\tdescription = \"You failed!\";\n\t};\n};\n");
+	}
 }
 
 
 void MainWindow::checkInitSqf(QString line)
 {
 	line = line.toLower();
-	if (line.contains("shk_taskmaster.sqf")) ui->textEdit->append("init.sqf -> SHK_Taskmaster.sqf detected.");
-	if (line.contains("briefing.sqf")) ui->textEdit->append("init.sqf -> briefing.sqf detected.");
+	if (line.contains("shk_taskmaster.sqf"))
+	{
+		ui->textEdit->append("init.sqf -> SHK_Taskmaster.sqf detected.");
+		taskTypeShuko = true;
+	}
+	if (line.contains("briefing.sqf"))
+	{
+		ui->textEdit->append("init.sqf -> briefing.sqf detected.");
+		taskTypeArmA2 = true;
+	}
 }
 
 
@@ -263,10 +298,27 @@ QString MainWindow::convertSqmLine(QString line)
 	line.replace("\"\"", "\"");
 	line.truncate(line.length()-2);
 	taskID++;
-	outputSqf = "/*\n\n\tcreated with Mission Converter by PMC\n\n\ttask ID should be: " + QString::number(taskID) + "\n\n*/\n\n";
+	outputSqf = sqfHeader() + "/*\n\n\ttask ID should be: " + QString::number(taskID) + "\n\n*/\n";
 	line = line.simplified();
 	outputSqf.append(line);
 	outputSqf.replace(";", ";\n");
+
+	// this is so lame and SO needs an regular expression ...
+	outputSqf.replace("\"1\" objStatus \"DONE\"", "[\"t1\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"2\" objStatus \"DONE\"", "[\"t2\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"3\" objStatus \"DONE\"", "[\"t3\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"4\" objStatus \"DONE\"", "[\"t4\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"5\" objStatus \"DONE\"", "[\"t5\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"6\" objStatus \"DONE\"", "[\"t6\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"7\" objStatus \"DONE\"", "[\"t7\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"8\" objStatus \"DONE\"", "[\"t8\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"9\" objStatus \"DONE\"", "[\"t9\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("\"10\" objStatus \"DONE\"", "[\"t10\", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+
+	// this is even dirtier, eew
+	outputSqf.replace("setTaskState \"SUCCEEDED\"", ", \"SUCCEEDED\", true] spawn BIS_fnc_taskSetState");
+	outputSqf.replace("setTaskState \"FAILED\"", ", \"FAILED\", true] spawn BIS_fnc_taskSetState");
+
 	taskFilename = "PMC_Objective" + QString::number(taskID) + ".sqf";
 
 	if (originalLine.contains("onActivation")) originalLine = "onActivation=\"0 = [] execVM \"\"PMC\\" + taskFilename + "\"\";\";";
@@ -317,6 +369,7 @@ QString MainWindow::extractOverview(QString line)
 	line.replace("<p align=\"center\">", "");
 	line.replace("<h2 align=\"center\">", "");
 	line.replace("<br>", "");
+	line.replace("<BR>", "");
 	line.replace("<p>", "");
 	line.replace("</p>", "");
 	line.replace("<img src=\"overview_mission_ca.paa\"", "overviewPicture = \"overview_mission_ca.paa\";");
@@ -328,10 +381,8 @@ QString MainWindow::extractOverview(QString line)
 	line.replace("<! ---  TEXT FOR MISSION TITLE   --->", "");
 	line.replace("<! ---    TEXT FOR DESCRIPTION	 --->", "");
 	line.replace("<! --- END OF OVERVIEW>", "");
-	//line.replace("<>", "");
-	//line.replace("</>", "");
 	line = line.simplified();
-	line.prepend("/*\n\n\tcreated with Mission Converter by PMC\n\n*/\n\noverviewText = \"");
+	line.prepend(sqfHeader() + "\noverviewText = \"");
 	line.append("\";");
 
 	return line;
@@ -348,6 +399,18 @@ void MainWindow::createDescriptionExt(QString dext)
 		ui->textEdit->append("Created " + File.fileName());
 		QTextStream out(&File);
 		out << overviewBlob << "\n";
+
+		// create resource file for this junk, then use replace string and take values from GUI or something
+		out << "author = \"Snake Man, PMC.\";\n";
+		out << "onLoadName = \"\";\n";
+		out << "onLoadMission = \"https://www.pmctactical.org\";\n";
+		out << "onLoadMissionTime = 1;\n";
+		out << "onLoadIntro = \"https://www.pmctactical.org\";\n";
+		out << "onLoadIntroTime = 1;\n";
+		out << "overviewPicture = \"\";\n";
+		out << "\nclass CfgDebriefing\n{\n\tclass pmc_end1\n\t{\n\t\ttitle = \"Mission Accomplished!\";\n\t\tdescription = \"Congratulations\";\n\t};\n";
+		out << "\n\tclass pmc_end2\n\t{\n\t\ttitle = \"Mission Lost!\";\n\t\tdescription = \"You failed!\";\n\t};\n};\n";
+
 		File.close();
 	}
 }
@@ -357,20 +420,22 @@ QString MainWindow::parseTaskCreate(QString line)
 {
 	QStringList list;
 	list = line.split(" ");
-	// 0 - objective variable name
-	// 1 - =
-	// 2 - player
-	// 3 - createSimpleTask
-	// 4 - beginning of the array
-	QString temps = "[player,[\"" + list[0] + "\"],[\"";
+	QString temps = "[player,[\"" + list[0].simplified() + "\"],[\"";
 	list = line.split("\"");
-	//ui->textEdit->append("list[]: " + list[1]);
-	temps.append(list[1] + "\",\"" + list[1] + "\",\"" + list[1] + "\"],objNull,1,2,true] call BIS_fnc_taskCreate;");
+	temps.append(list[1].simplified() + "\",\"" + list[1].simplified() + "\",\"" + list[1].simplified() + "\"],objNull,1,2,true] call BIS_fnc_taskCreate;");
 	// doesnt work here, you have to detect somehow the LAST task, not after every task hehe
 	//temps.append("\n\n[\"t1\", \"ASSIGNED\"] call BIS_fnc_taskSetState;");
-	ui->textEdit->append(temps);
-	//ui->textEdit->append(line);
-	// tasks need to be in reversed order
-	//objective4 = player createSimpleTask ["Target 4"];
+
 	return temps;
+}
+
+
+QString MainWindow::sqfHeader()
+{
+	QDateTime date = QDateTime::currentDateTimeUtc();
+	QString utctime = date.toString(Qt::ISODate);
+
+	QString sqfhdr = "/*\n\n\tCreated at " + utctime + " with Mission Converter " + pmcVersion + " by PMC\n\n*/\n";
+
+	return sqfhdr;
 }
